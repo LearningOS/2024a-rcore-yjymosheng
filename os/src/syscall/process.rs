@@ -73,11 +73,10 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
     unsafe {
         * _ti = get_task_info();
-        println!("\t the new info");
-        println!("\t\t status TaskStatus::{:?}",(*_ti).status);
-        println!(" syscall_times {:?}",(*_ti).syscall_times);
-        // println!("\t\t start_time {}",(*_ti).start_time);
-        println!("\t\t time {}",(*_ti).time);
+        // println!("\t the new info");
+        // println!("\t\t status TaskStatus::{:?}",(*_ti).status);
+        // println!(" syscall_times {:?}",(*_ti).syscall_times);
+        // println!("\t\t time {}",(*_ti).time);
 
 
     }
