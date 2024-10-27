@@ -1,6 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use alloc::collections::btree_map::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -68,6 +69,7 @@ impl PageTableEntry {
 pub struct PageTable {
     root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
+    mem_map : BTreeMap<VirtPageNum, FrameTracker>
 }
 
 /// Assume that it won't oom when creating/mapping.
@@ -78,6 +80,7 @@ impl PageTable {
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],
+            mem_map : BTreeMap::new(),
         }
     }
     /// Temporarily used to get arguments from user space.
@@ -85,6 +88,9 @@ impl PageTable {
         Self {
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
             frames: Vec::new(),
+
+            mem_map : BTreeMap::new(),
+
         }
     }
     /// Find PageTableEntry by VirtPageNum, create a frame for a 4KB page table if not exist
@@ -147,6 +153,75 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
+    /// translated by va
+    pub fn translated_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.find_pte(va.clone().floor()).map(|pte| {
+            let pn: PhysAddr = pte.ppn().into();
+            let offset = va.page_offset();
+            let pn: usize = pn.into();
+            (pn + offset).into()
+        })
+    }/// mmap operation
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        // Fetch the virtual addresses
+        let mut start_virt_addr = VirtPageNum(start);
+        let end_virt_addr = VirtPageNum(start + len);
+
+        println!("start {:?} {}", start_virt_addr, start);
+
+        // Fetch the permission flag
+        let mut permission_flags = PTEFlags::from_bits_truncate(port as u8);
+        if port & (1 << 0) != 0 {
+            permission_flags |= PTEFlags::R;
+        }
+        if port & (1 << 1) != 0 {
+            permission_flags |= PTEFlags::W;
+        }
+        if port & (1 << 2) != 0 {
+            permission_flags |= PTEFlags::X;
+        }
+        permission_flags |= PTEFlags::U;
+        permission_flags |= PTEFlags::V;
+        while start_virt_addr < end_virt_addr {
+            // If exist, return error.
+            if let Some(entry) = self.translate(start_virt_addr) {
+                if entry.is_valid() {
+                    println!("ERROR: ENTRY VALID {} IN {} - {}", start_virt_addr.0, start, start + len);
+                    return -1;
+                    // self.unmap(start_virt_addr);
+                }
+            }
+            // Allocate frame
+            if let Some(tracker) = frame_alloc() {
+                self.map(start_virt_addr, tracker.ppn, permission_flags);
+                self.mem_map.insert(start_virt_addr, tracker);
+            } else {
+                println!("ERROR: ALLOC NONE {} IN {} - {}", start_virt_addr.0, start, start + len);
+                return -1;
+            }
+            start_virt_addr.step();
+        }
+        0
+    }
+    
+    #[allow(unused)]
+    /// Do mummap
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        let mut start_virt_addr = VirtPageNum(start);
+        let end_virt_addr = VirtPageNum(start + len);
+        while start_virt_addr < end_virt_addr {
+                if let Some(entry) = self.translate(start_virt_addr) {
+                if !entry.is_valid() {
+                    println!("ERROR: ENTRY INVALID {} IN {} - {}", start_virt_addr.0, start, start + len);
+                    return -1;
+                }
+            }
+            self.unmap(start_virt_addr);
+            self.mem_map.remove(&start_virt_addr);
+            start_virt_addr.step();
+        }
+        0
+    }
 }
 
 /// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
@@ -170,4 +245,83 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+/// for get time
+pub fn translated_refmut<T>(token: usize, ptr: *const T) -> &'static mut T {
+    let table = PageTable::from_token(token);
+    let va = ptr as usize;
+    table.translated_va(VirtAddr::from(va)).unwrap().get_mut()
+}
+// /// do map
+// pub fn page_table_mmap(token: usize, start: usize, len: usize, port: usize) -> isize {
+//     if port >> 3 != 0 {
+//         return -1;
+//     }
+//     if port & 0x7 == 0 {
+//         return -1;
+//     }
+
+//     let mut flags = PTEFlags::from_bits_truncate(port as u8);
+
+//     if port & (1 << 0) != 0 {
+//         flags |= PTEFlags::R;
+//     }
+//     if port & (1 << 1) != 0 {
+//         flags |= PTEFlags::W;
+//     }
+//     if port & (1 << 2) != 0 {
+//         flags |= PTEFlags::X;
+//     }
+
+//     flags |= PTEFlags::U;
+//     flags |= PTEFlags::V;
+
+//     let mut table = PageTable::from_token(token);
+//     for i in start..start + len {
+//         if let Some(pte) = table.find_pte(i.into()) {
+//             if pte.is_valid() {
+//                 return  - 1;
+//             }
+//         }
+
+//         if let Some(fram) = frame_alloc() {
+//             table.map(i.into(), fram.ppn, flags);
+//             table.mem_map.insert(i.into(), fram);
+
+//         } else {
+//             println!("error ! alloc   in {} - {}", start, start + len);
+//             return -1;
+//         }
+//     }
+//     0
+// }
+
+// /// do unmap
+// pub fn page_table_munmap(token: usize, start: usize, len: usize) -> isize {
+//     let mut table = PageTable::from_token(token);
+//     for i in start..start + len {
+//         if let Some(pte) = table.find_pte(i.into()) {
+//             if !pte.is_valid() {
+//                 println!("has been unmaped");
+//                 return -1;
+//             }
+//         }
+//         table.unmap(i.into());
+//         table.mem_map.remove(&(i.into()));
+//     }
+//     0
+// }
+
+
+/// Memory map
+pub fn page_table_mmap(token: usize, start: usize, len: usize, port: usize) -> isize {
+    let mut page_table = PageTable::from_token(token);
+    page_table.mmap(start, len, port)
+}
+
+#[allow(unused)]
+/// Memory unmap
+pub fn page_table_munmap(token: usize, start: usize, len: usize) -> isize {
+    let mut page_table = PageTable::from_token(token);
+    page_table.munmap(start, len)
 }

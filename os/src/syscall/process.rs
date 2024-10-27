@@ -1,27 +1,52 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
+    mm::{ page_table_mmap, page_table_munmap, translated_refmut},
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, current_user_token, exit_current_and_run_next, fetch_info, suspend_current_and_run_next, TaskStatus
     },
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
+/// Task status in it's life cycle
 #[derive(Debug)]
+/// Task status in it's life cycle
 pub struct TimeVal {
+    /// Task status in it's life cycle
     pub sec: usize,
+    /// Task status in it's life cycle
     pub usec: usize,
 }
 
 /// Task information
 #[allow(dead_code)]
+#[derive(Clone, Copy)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
+}
+
+impl TaskInfo {
+    /// new
+    pub fn new() -> Self {
+        TaskInfo {
+            status: TaskStatus::UnInit,
+            syscall_times: [0; MAX_SYSCALL_NUM],
+            time: 0,
+        }
+    }
+
+    /// update time
+    pub fn update_time(&mut self) {
+        if self.time == 0 {
+            self.time = get_time_ms();
+        }
+    }
 }
 
 /// task exits and submit an exit code
@@ -43,7 +68,15 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    *translated_refmut(current_user_token(), _ts) = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    // println!("time is {:?} ",*translated_refmut(current_user_token(), _ts));
+
+    trace!("time is {:?} ",*translated_refmut(current_user_token(), _ts));
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -51,19 +84,22 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    * translated_refmut(current_user_token(), _ti) = fetch_info();
+    0
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+/// new
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    page_table_mmap(current_user_token(), start, len, port)
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+/// new
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    page_table_munmap(current_user_token(), start, len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
