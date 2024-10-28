@@ -161,20 +161,41 @@ impl TaskManager {
     }
 /// new
 
-    pub fn trace_syscall(&self , syscall_id : usize){
+     fn trace_syscall(&self , syscall_id : usize){
         let mut inner = self.inner.exclusive_access();
 
             let current = inner.current_task;
         inner.tasks[current].task_info.syscall_times[syscall_id%MAX_SYSCALL_NUM] +=1;
     }
 ///new 
-    pub fn fetch_info(&self)  -> TaskInfo{
+     fn fetch_info(&self)  -> TaskInfo{
         let  inner = self.inner.exclusive_access();
         let current = inner.current_task;
         let mut tt  = inner.tasks[current].task_info;
         tt.time = get_time_ms() - tt.time;
         tt
     }
+
+
+    /// map 
+     fn task_map(&self , start:usize,len:usize,port:usize) -> isize{
+        let inner = self.inner.exclusive_access();
+    
+        let current = inner.current_task;
+        let mut mem_map =  inner.tasks[current].memory_set;
+
+        mem_map.mmap(start,len,port)
+     }
+
+       /// unmap 
+       fn task_unmap(&self , start:usize,len:usize) -> isize{
+        let inner = self.inner.exclusive_access();
+    
+        let current = inner.current_task;
+        let mut mem_map =  inner.tasks[current].memory_set;
+
+        mem_map.munmap(start,len)
+     }
 
 }
 
@@ -234,4 +255,11 @@ pub fn trace_syscall(syscall_id : usize) {
 pub fn fetch_info() -> TaskInfo{
     TASK_MANAGER.fetch_info()
 }
-
+/// map
+pub fn task_map(start:usize,len:usize,port:usize) -> isize{
+    TASK_MANAGER.task_map(start,len,port)
+}
+/// unmap
+pub fn task_map(start:usize,len:usize) -> isize{
+    TASK_MANAGER.task_unmap(start,len)
+}

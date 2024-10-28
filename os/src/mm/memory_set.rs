@@ -262,6 +262,66 @@ impl MemorySet {
             false
         }
     }
+    /// map
+    pub fn mmap(&self, start: usize, len: usize, port: usize) -> isize {
+        if start % PAGE_SIZE != 0 {
+            return -1;
+        }
+
+        if port & !0x7 != 0 {
+            return -1;
+        }
+        if port & 0x7 == 0 {
+            return -1;
+        }
+
+        let start_va: VirtAddr = start.into();
+        let end_va: VirtAddr = (start + len).into();
+
+        let mut flag = false;
+        for area in self.areas.iter() {
+            let range_start = area.vpn_range.get_start();
+            let range_end = area.vpn_range.get_end();
+            if range_start >= start_va.floor() || range_end <= end_va.ceil() {
+                flag = true;
+            }
+        }
+
+        if flag {
+            return -1;
+        }
+
+        let mut permission = MapPermission::empty();
+        if port & (1 << 0) != 0 {
+            permission |= MapPermission::R;
+        }
+        if port & (1 << 1) != 0 {
+            permission |= MapPermission::W;
+        }
+        if port & (1 << 2) != 0 {
+            permission |= MapPermission::X;
+        }
+
+        permission |= MapPermission::U;
+
+        self.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+    /// unmap
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        for area in self.areas.iter() {
+            let range_start = area.vpn_range.get_start();
+            let range_end = area.vpn_range.get_end();
+            if range_start >= start_va.floor() || range_end <= end_va.ceil() {
+                flag = true;
+            }
+        }
+
+        if flag {
+            return -1;
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
