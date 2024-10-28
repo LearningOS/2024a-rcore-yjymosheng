@@ -161,66 +161,6 @@ impl PageTable {
             let pn: usize = pn.into();
             (pn + offset).into()
         })
-    }/// mmap operation
-    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
-        // Fetch the virtual addresses
-        let mut start_virt_addr = VirtPageNum(start);
-        let end_virt_addr = VirtPageNum(start + len);
-
-        println!("start {:?} {}", start_virt_addr, start);
-
-        // Fetch the permission flag
-        let mut permission_flags = PTEFlags::from_bits_truncate(port as u8);
-        if port & (1 << 0) != 0 {
-            permission_flags |= PTEFlags::R;
-        }
-        if port & (1 << 1) != 0 {
-            permission_flags |= PTEFlags::W;
-        }
-        if port & (1 << 2) != 0 {
-            permission_flags |= PTEFlags::X;
-        }
-        permission_flags |= PTEFlags::U;
-        permission_flags |= PTEFlags::V;
-        while start_virt_addr < end_virt_addr {
-            // If exist, return error.
-            if let Some(entry) = self.translate(start_virt_addr) {
-                if entry.is_valid() {
-                    println!("ERROR: ENTRY VALID {} IN {} - {}", start_virt_addr.0, start, start + len);
-                    return -1;
-                    // self.unmap(start_virt_addr);
-                }
-            }
-            // Allocate frame
-            if let Some(tracker) = frame_alloc() {
-                self.map(start_virt_addr, tracker.ppn, permission_flags);
-                self.mem_map.insert(start_virt_addr, tracker);
-            } else {
-                println!("ERROR: ALLOC NONE {} IN {} - {}", start_virt_addr.0, start, start + len);
-                return -1;
-            }
-            start_virt_addr.step();
-        }
-        0
-    }
-    
-    #[allow(unused)]
-    /// Do mummap
-    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
-        let mut start_virt_addr = VirtPageNum(start);
-        let end_virt_addr = VirtPageNum(start + len);
-        while start_virt_addr < end_virt_addr {
-                if let Some(entry) = self.translate(start_virt_addr) {
-                if !entry.is_valid() {
-                    println!("ERROR: ENTRY INVALID {} IN {} - {}", start_virt_addr.0, start, start + len);
-                    return -1;
-                }
-            }
-            self.unmap(start_virt_addr);
-            self.mem_map.remove(&start_virt_addr);
-            start_virt_addr.step();
-        }
-        0
     }
 }
 
@@ -286,8 +226,9 @@ pub fn translated_refmut<T>(token: usize, ptr: *const T) -> &'static mut T {
 
 //         if let Some(fram) = frame_alloc() {
 //             table.map(i.into(), fram.ppn, flags);
-//             table.mem_map.insert(i.into(), fram);
+//             table.mem_map.insert(i.into(), fram.clone());
 
+//             table.frames.push(fram);
 //         } else {
 //             println!("error ! alloc   in {} - {}", start, start + len);
 //             return -1;
@@ -311,17 +252,3 @@ pub fn translated_refmut<T>(token: usize, ptr: *const T) -> &'static mut T {
 //     }
 //     0
 // }
-
-
-/// Memory map
-pub fn page_table_mmap(token: usize, start: usize, len: usize, port: usize) -> isize {
-    let mut page_table = PageTable::from_token(token);
-    page_table.mmap(start, len, port)
-}
-
-#[allow(unused)]
-/// Memory unmap
-pub fn page_table_munmap(token: usize, start: usize, len: usize) -> isize {
-    let mut page_table = PageTable::from_token(token);
-    page_table.munmap(start, len)
-}
