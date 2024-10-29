@@ -179,20 +179,20 @@ impl TaskManager {
 
     /// map 
      fn task_map(&self , start:usize,len:usize,port:usize) -> isize{
-        let inner = self.inner.exclusive_access();
+        let mut  inner = self.inner.exclusive_access();
     
         let current = inner.current_task;
-        let mut mem_map =  inner.tasks[current].memory_set;
+        let  mem_map = &mut inner.tasks[current].memory_set;
 
         mem_map.mmap(start,len,port)
      }
 
        /// unmap 
        fn task_unmap(&self , start:usize,len:usize) -> isize{
-        let inner = self.inner.exclusive_access();
+        let mut inner = self.inner.exclusive_access();
     
         let current = inner.current_task;
-        let mut mem_map =  inner.tasks[current].memory_set;
+        let mem_map =&mut inner.tasks[current].memory_set;
 
         mem_map.munmap(start,len)
      }
@@ -260,6 +260,6 @@ pub fn task_map(start:usize,len:usize,port:usize) -> isize{
     TASK_MANAGER.task_map(start,len,port)
 }
 /// unmap
-pub fn task_map(start:usize,len:usize) -> isize{
+pub fn task_unmap(start:usize,len:usize) -> isize{
     TASK_MANAGER.task_unmap(start,len)
 }

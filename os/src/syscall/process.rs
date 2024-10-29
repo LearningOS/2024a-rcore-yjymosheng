@@ -1,9 +1,9 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::{ page_table_mmap, page_table_munmap, translated_refmut},
+    mm:: translated_refmut,
     task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, fetch_info, suspend_current_and_run_next, TaskStatus
+        change_program_brk, current_user_token, exit_current_and_run_next, fetch_info, suspend_current_and_run_next, task_map, task_unmap, TaskStatus
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -92,7 +92,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 /// new
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-
+    task_map(start, len, port)
 }
 
 // YOUR JOB: Implement munmap.
@@ -100,7 +100,7 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
 
-
+task_unmap(start, len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

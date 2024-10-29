@@ -263,7 +263,7 @@ impl MemorySet {
         }
     }
     /// map
-    pub fn mmap(&self, start: usize, len: usize, port: usize) -> isize {
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
         if start % PAGE_SIZE != 0 {
             return -1;
         }
@@ -275,19 +275,20 @@ impl MemorySet {
             return -1;
         }
 
-        let start_va: VirtAddr = start.into();
-        let end_va: VirtAddr = (start + len).into();
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len);
 
-        let mut flag = false;
+        let mut found = false;
+
         for area in self.areas.iter() {
             let range_start = area.vpn_range.get_start();
             let range_end = area.vpn_range.get_end();
-            if range_start >= start_va.floor() || range_end <= end_va.ceil() {
-                flag = true;
+            if range_end > start_va.floor() && range_start < end_va.ceil() {
+                found = true;
             }
         }
 
-        if flag {
+        if found {
             return -1;
         }
 
@@ -308,17 +309,30 @@ impl MemorySet {
         0
     }
     /// unmap
-    pub fn munmap(&self, start: usize, len: usize) -> isize {
-        for area in self.areas.iter() {
-            let range_start = area.vpn_range.get_start();
-            let range_end = area.vpn_range.get_end();
-            if range_start >= start_va.floor() || range_end <= end_va.ceil() {
-                flag = true;
-            }
+    #[allow(unused)]
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len);
+
+        if !start_va.aligned() || !end_va.aligned() {
+            return -1;
         }
 
-        if flag {
-            return -1;
+        let mut found = -1;
+        let mut index = 0;
+
+        for area in self.areas.iter_mut() {
+            let range_start = area.vpn_range.get_start();
+            let range_end = area.vpn_range.get_end();
+            if range_start <= start_va.floor() && range_end <= end_va.ceil() {
+                found = index;
+            }
+            index += 1;
+        }
+        if found >= 0 {
+            let index = found as usize;
+            self.areas[index].unmap(&mut self.page_table);
+            self.areas.remove(index);
         }
         0
     }

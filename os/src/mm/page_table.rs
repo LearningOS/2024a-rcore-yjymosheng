@@ -1,7 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
-use alloc::collections::btree_map::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -69,7 +68,6 @@ impl PageTableEntry {
 pub struct PageTable {
     root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
-    mem_map : BTreeMap<VirtPageNum, FrameTracker>
 }
 
 /// Assume that it won't oom when creating/mapping.
@@ -80,7 +78,6 @@ impl PageTable {
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],
-            mem_map : BTreeMap::new(),
         }
     }
     /// Temporarily used to get arguments from user space.
@@ -89,7 +86,6 @@ impl PageTable {
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
             frames: Vec::new(),
 
-            mem_map : BTreeMap::new(),
 
         }
     }
