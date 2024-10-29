@@ -278,12 +278,31 @@ impl MemorySet {
         let start_va = VirtAddr::from(start);
         let end_va = VirtAddr::from(start + len);
 
-        let mut found = false;
+        let mut found: bool = false;
+        let mut cnt = 1;
 
         for area in self.areas.iter() {
             let range_start = area.vpn_range.get_start();
             let range_end = area.vpn_range.get_end();
+
+            println!(
+                "\u{1B}[{}m\t the {} times start {:?} end {:?}\u{1B}[0m",
+                31, cnt, range_start, range_end,
+            );
+
+            cnt += 1;
             if range_end > start_va.floor() && range_start < end_va.ceil() {
+                println!(
+                    "\u{1B}[{}m\t\t start_va {:?} end {:?}\u{1B}[0m",
+                    31,
+                    start_va.floor(),
+                    end_va.ceil(),
+                );
+                println!(
+                    "\u{1B}[{}m\t\t start {:?} end {:?}\u{1B}[0m",
+                    31, range_start, range_end,
+                );
+
                 found = true;
             }
         }
@@ -320,12 +339,28 @@ impl MemorySet {
 
         let mut found = -1;
         let mut index = 0;
+        let mut cnt = 1;
 
         for area in self.areas.iter_mut() {
             let range_start = area.vpn_range.get_start();
             let range_end = area.vpn_range.get_end();
+            println!(
+                "\u{1B}[{}m\t the {} times start {:?} end {:?}\u{1B}[0m",
+                93, cnt, range_start, range_end,
+            );
+            cnt += 1;
             if range_start <= start_va.floor() && range_end <= end_va.ceil() {
                 found = index;
+                println!(
+                    "\u{1B}[{}m\t\t start_va {:?} end {:?}\u{1B}[0m",
+                    93,
+                    start_va.floor(),
+                    end_va.ceil(),
+                );
+                println!(
+                    "\u{1B}[{}m\t\t start {:?} end {:?}\u{1B}[0m",
+                    93, range_start, range_end,
+                );
             }
             index += 1;
         }
