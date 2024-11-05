@@ -318,6 +318,75 @@ impl MemorySet {
             false
         }
     }
+/// mmap
+    pub fn mmap(&mut self ,start: usize , len: usize,port:usize) -> isize{
+
+        if start%PAGE_SIZE!=0 {
+            return -1  ;
+        }
+        if port & !0x7 != 0 {
+            return -1;
+        }
+        if port & 0x7 == 0  {
+            return -1;
+        }
+
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start+len);
+
+
+        for i in self.areas.iter() {
+            let range_start = i.vpn_range.get_start();
+            let range_end = i.vpn_range.get_end();
+
+            if range_end > start_va.floor() && range_start < end_va.ceil() {
+                return -1;
+            }
+        }
+
+        let mut permission = MapPermission::empty();
+
+        if port& (1<<0) != 0  {
+            permission |= MapPermission::R;
+        }
+        if port& (1<<1) != 0  {
+            permission |= MapPermission::W;
+        }
+        if port& (1<<2) != 0  {
+            permission |= MapPermission::X;
+        }
+        permission |= MapPermission::U;
+
+        self.insert_framed_area(start_va, end_va, permission);
+        0
+
+    }
+/// do unmap
+    pub fn munmap (&mut self,start: usize,len: usize ) -> isize{
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start+len);
+
+        if! start_va.aligned() || !end_va.aligned()  {
+            return -1 ;
+        }   
+        let mut index = 0;
+        let mut found = -1;
+        for i in self.areas.iter_mut() {
+            let range_start = i.vpn_range.get_start();
+            let range_end= i.vpn_range.get_end();
+            if range_start <= start_va.floor() && range_end <= end_va.ceil() {
+                found = index;
+            }
+            index+=1;
+        }
+
+        if found >=0  {
+            let index = found as usize;
+            self.areas[index].unmap(&mut self.page_table);
+            self.areas.remove(index);
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
