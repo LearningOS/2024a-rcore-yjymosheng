@@ -8,6 +8,8 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
+use crate::syscall::process::TaskInfo;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -44,6 +46,17 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
+    fn fetch_info(&self) -> TaskInfo{
+        let  ti = self.current().unwrap();
+        let ti = &ti.inner_exclusive_access().task_info;
+        TaskInfo{
+            time:          get_time_ms() - ti.time,
+            status : ti.status,
+            syscall_times :ti.syscall_times,
+        }
+        
+    }
 }
 
 lazy_static! {
@@ -60,7 +73,10 @@ pub fn run_tasks() {
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-            task_inner.task_status = TaskStatus::Running;
+            task_inner.task_info.status = TaskStatus::Running;
+            if task_inner.task_info.time==0  {
+                task_inner.task_info.time = get_time_ms();
+            }
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -108,4 +124,9 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// new
+pub fn fetch_info() -> TaskInfo{
+        PROCESSOR.exclusive_access().fetch_info() 
 }

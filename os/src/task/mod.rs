@@ -21,7 +21,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{config::MAX_SYSCALL_NUM, loader::get_app_data_by_name};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -32,7 +32,7 @@ pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::add_task;
 pub use processor::{
-    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
+    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,fetch_info,
     Processor,
 };
 /// Suspend the current 'Running' task and run the next task in task list.
@@ -44,7 +44,7 @@ pub fn suspend_current_and_run_next() {
     let mut task_inner = task.inner_exclusive_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
-    task_inner.task_status = TaskStatus::Ready;
+    task_inner.task_info.status = TaskStatus::Ready;
     drop(task_inner);
     // ---- release current PCB
 
@@ -74,7 +74,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // **** access current TCB exclusively
     let mut inner = task.inner_exclusive_access();
     // Change status to Zombie
-    inner.task_status = TaskStatus::Zombie;
+    inner.task_info.status = TaskStatus::Zombie;
     // Record exit code
     inner.exit_code = exit_code;
     // do not move to its parent but under initproc
@@ -114,4 +114,26 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+/// do map
+
+pub fn do_mmap( start:usize, len:usize,port:usize) -> isize{
+    let task = current_task().unwrap();
+    let mem = &mut task.inner_exclusive_access().memory_set;
+    mem.mmap(start, len, port)
+}
+
+/// do unmap
+pub fn    do_munmap (start:usize,len:usize) -> isize{
+    let task = current_task().unwrap();
+    let mem = &mut task.inner_exclusive_access().memory_set;
+    mem.munmap(start, len)
+}
+
+/// trace 
+pub fn trace_syscall ( syscall_id : usize) -> usize{
+    let task  =current_task().unwrap();
+    let mut  inner = task.inner_exclusive_access();
+    inner.task_info.syscall_times[syscall_id % MAX_SYSCALL_NUM] +=1;
+    0
 }

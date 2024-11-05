@@ -1,9 +1,11 @@
 //! Types related to task management & Functions for completely changing TCB
-use super::TaskContext;
+use super::  TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::loader::get_app_data_by_name;
+use crate::mm::{ MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
+use crate::syscall::process::TaskInfo;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
@@ -48,7 +50,7 @@ pub struct TaskControlBlockInner {
     pub task_cx: TaskContext,
 
     /// Maintain the execution status of the current process
-    pub task_status: TaskStatus,
+    pub task_info: TaskInfo,
 
     /// Application address space
     pub memory_set: MemorySet,
@@ -80,7 +82,7 @@ impl TaskControlBlockInner {
         self.memory_set.token()
     }
     fn get_status(&self) -> TaskStatus {
-        self.task_status
+        self.task_info.status
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
@@ -102,6 +104,8 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+        let mut task_info = TaskInfo::new();
+        task_info.status = TaskStatus::Ready;
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
@@ -111,7 +115,7 @@ impl TaskControlBlock {
                     trap_cx_ppn,
                     base_size: user_sp,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
-                    task_status: TaskStatus::Ready,
+                    task_info,
                     memory_set,
                     parent: None,
                     children: Vec::new(),
@@ -176,6 +180,8 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+        let mut task_info = TaskInfo::new();
+        task_info.status = TaskStatus::Ready;
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -184,7 +190,7 @@ impl TaskControlBlock {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
-                    task_status: TaskStatus::Ready,
+                    task_info,
                     memory_set,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
@@ -204,6 +210,15 @@ impl TaskControlBlock {
         task_control_block
         // **** release child PCB
         // ---- release parent PCB
+    }
+/// spwan
+    pub fn spwan(self : &Arc<Self>,path : & str) -> Option<Arc<Self>>{
+        let name = path;
+        let task = Arc::new(Self::new(get_app_data_by_name(name).unwrap()));
+
+        let mut parent_inner = self.inner_exclusive_access();
+        parent_inner.children.push(task.clone());
+        Some(task)
     }
 
     /// get pid of process
