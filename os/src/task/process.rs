@@ -49,6 +49,22 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+///new
+    pub deadlock_detect: bool,
+///new
+    pub locker: ProcessLocker,
+}
+
+///new
+pub struct ProcessLocker {
+///new
+    pub available: Vec<usize>,
+///new
+    pub allocation: Vec<Vec<usize>>,
+///new
+    pub need: Vec<Vec<usize>>,
+///new
+pub finish: Vec<bool>,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +135,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect: false,
+                    locker: ProcessLocker::new(),
                 })
             },
         });
@@ -143,6 +161,7 @@ impl ProcessControlBlock {
         );
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
+        process_inner.locker.init();
         process_inner.tasks.push(Some(Arc::clone(&task)));
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
@@ -245,7 +264,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
-                })
+                    deadlock_detect: false,
+                    locker: ProcessLocker::new(), })
             },
         });
         // add child
@@ -266,6 +286,7 @@ impl ProcessControlBlock {
         ));
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
+        child_inner.locker.init();
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
@@ -281,5 +302,53 @@ impl ProcessControlBlock {
     /// get pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+}
+
+
+impl ProcessLocker {
+    pub fn new() -> Self {
+        Self {
+            available: Vec::new(),
+            allocation: Vec::new(),
+            need: Vec::new(),
+            finish: Vec::new(),
+        }
+    }
+
+    pub fn init(&mut self) {
+        self.available.resize(2, 0);
+        self.allocation.push(vec![0, 0]);
+        self.need.push(vec![0, 0]);
+        self.finish.push(true);
+    }
+
+    pub fn add(&mut self, id: usize) {
+        self.available[id] += 1;
+    }
+
+    pub fn remove(&mut self, id: usize, flag: usize) {
+        self.allocation[id][flag] -= 1;
+        self.need[id][flag] = 0;
+    }
+
+    pub fn alloc(&mut self, id: usize) {
+        self.allocation[id][0] += self.need[id][0];
+        self.allocation[id][1] += self.need[id][1];
+        self.need[id][0] = 0;
+        self.need[id][1] = 0;
+    }
+
+    pub fn detect(&mut self, id: usize, flag: usize) -> usize {
+        if self.available[flag] > self.need[id][flag] {
+            self.need[id][flag] += 1;
+            return 0;
+        } else {
+            return 0xDEAD;
+        }
+    }
+
+    pub fn finish(&mut self, id: usize) {
+        self.finish[id] = true;
     }
 }
