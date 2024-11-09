@@ -8,7 +8,7 @@ use crate::sync::UPSafeCell;
 use crate::syscall::process::TaskInfo;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
-use alloc::vec;
+use alloc:: vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
 
@@ -236,13 +236,14 @@ impl TaskControlBlock {
         // ---- release parent PCB
     }
 /// spwan
-    pub fn spwan(self : &Arc<Self>,path : & str) -> Option<Arc<Self>>{
-        let name = path;
-        let task = Arc::new(Self::new(get_app_data_by_name(name).unwrap()));
-
+    pub fn spwan(self : Arc<Self>  ,elf_data : &[u8]) -> Option<Arc<Self>>{
+        let task = Arc::new(Self::new(elf_data));
         let mut parent_inner = self.inner_exclusive_access();
         parent_inner.children.push(task.clone());
-        Some(task)
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.parent = Some(Arc::downgrade(&self));
+        Some(task.clone())
+      
     }
 
     /// get pid of process

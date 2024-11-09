@@ -44,12 +44,14 @@ impl TaskInfo {
     }
 }
 
+/// new
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("kernel:pid[{}] sys_exit", current_task().unwrap().pid.0);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
 
+/// new
 pub fn sys_yield() -> isize {
     //trace!("kernel: sys_yield");
     suspend_current_and_run_next();
@@ -196,21 +198,33 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(path: *const u8) -> isize {
+pub fn sys_spawn(_path: *const u8) -> isize {
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    let task = current_task().unwrap();
-    let new_task = task.spwan(&translated_str(current_user_token(), path));
-    let new_task = match new_task {
-        Some(task) => task,
-        None => return -1,
-    };
-    let pid = new_task.pid.0;
-
-    add_task(new_task);
-    pid as isize
+    // let task = current_task().unwrap();
+    // let new_task = task.spwan(&translated_str(current_user_token(), _path));
+    // let new_task = match new_task {
+    //     Some(task) => task,
+    //     None => return -1,
+    // };
+    let path = translated_str(current_user_token(), _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = match current_task().unwrap().spwan(&all_data){
+            Some(task) => task,
+            None=> return -1,
+        };
+        
+        add_task(task.clone());
+        let pid = task.pid.0;
+    
+        pid as isize
+    } else {
+        -1
+    }
+    // unimplemented!()
 }
 
 // YOUR JOB: Set task priority.
